@@ -1,0 +1,7 @@
+# Ignore the folder with downloaded packages
+node_modules
+
+# Ignore the file containing our secret local keys
+.env
+# Local Netlify folder
+.netlify

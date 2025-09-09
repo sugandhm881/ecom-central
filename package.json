@@ -1,0 +1,9 @@
+{
+  "name": "seller-dashboard",
+  "version": "1.0.0",
+  "description": "A unified seller panel.",
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "dependencies": {}
+}
