@@ -6,51 +6,19 @@ let activePlatformFilter = 'All';
 let activeStatusFilter = 'New';
 let activeDatePreset = 'today';
 let insightsDatePreset = 'last_7_days';
+let currentUser = null; // To store logged-in user info
 
 // --- CONSTANTS & DOM ELEMENTS ---
-const navDashboard = document.getElementById('nav-dashboard');
-const navInsights = document.getElementById('nav-insights');
-const navSettings = document.getElementById('nav-settings');
-const dashboardView = document.getElementById('dashboard-view');
-const insightsView = document.getElementById('insights-view');
-const settingsView = document.getElementById('settings-view');
-const ordersListEl = document.getElementById('orders-list');
-const notificationEl = document.getElementById('notification');
-const notificationMessageEl = document.getElementById('notification-message');
-const platformFiltersEl = document.getElementById('platform-filters');
-const statusFilterEl = document.getElementById('status-filter');
-const datePresetFilterEl = document.getElementById('date-preset-filter');
-const customDateContainer = document.getElementById('custom-date-container');
-const startDateFilterEl = document.getElementById('start-date-filter');
-const endDateFilterEl = document.getElementById('end-date-filter');
-const insightsDatePresetFilterEl = document.getElementById('insights-date-preset-filter');
-const insightsCustomDateContainer = document.getElementById('insights-custom-date-container');
-const insightsStartDateFilterEl = document.getElementById('insights-start-date-filter');
-const insightsEndDateFilterEl = document.getElementById('insights-end-date-filter');
+// Note: These are now initialized inside DOMContentLoaded to ensure elements exist
+let loginView, appView, logoutBtn, navDashboard, navInsights, navSettings,
+    dashboardView, insightsView, settingsView, ordersListEl, notificationEl,
+    notificationMessageEl, platformFiltersEl, statusFilterEl, datePresetFilterEl,
+    customDateContainer, startDateFilterEl, endDateFilterEl, insightsDatePresetFilterEl,
+    insightsCustomDateContainer, insightsStartDateFilterEl, insightsEndDateFilterEl,
+    dashboardKpiElements, insightsKpiElements, revenueChartCanvas, platformChartCanvas,
+    paymentChartCanvas, orderModal, modalBackdrop, modalContent, modalCloseBtn;
 
-const dashboardKpiElements = {
-    newOrders: document.getElementById('kpi-dashboard-new'),
-    shipped: document.getElementById('kpi-dashboard-shipped'),
-    processing: document.getElementById('kpi-dashboard-processing'),
-    cancelled: document.getElementById('kpi-dashboard-cancelled'),
-};
-const insightsKpiElements = {
-    revenue: { el: document.getElementById('kpi-insights-revenue') },
-    avgValue: { el: document.getElementById('kpi-insights-avg-value') },
-    allOrders: { el: document.getElementById('kpi-insights-all-orders') },
-    shipped: { el: document.getElementById('kpi-insights-shipped') },
-    processing: { el: document.getElementById('kpi-insights-processing') },
-    cancelled: { el: document.getElementById('kpi-insights-cancelled') },
-};
-const revenueChartCanvas = document.getElementById('revenue-chart');
-const platformChartCanvas = document.getElementById('platform-chart');
-const paymentChartCanvas = document.getElementById('payment-chart');
 let revenueChartInstance, platformChartInstance, paymentChartInstance;
-
-const orderModal = document.getElementById('order-modal');
-const modalBackdrop = document.getElementById('modal-backdrop');
-const modalContent = document.getElementById('modal-content');
-const modalCloseBtn = document.getElementById('modal-close-btn');
 
 let connections = [
     { name: 'Amazon', status: 'Connected', user: 'seller-amz-123' },
@@ -89,9 +57,26 @@ function createFallbackImage(itemName) {
 }
 
 // --- API CALL FUNCTIONS ---
+async function getAuthHeaders() {
+    if (!currentUser || !currentUser.token) {
+        console.error("No user logged in or token expired.");
+        netlifyIdentity.open(); 
+        return null;
+    }
+    return { 'Authorization': `Bearer ${currentUser.token.access_token}` };
+}
+
 async function fetchOrdersFromServer() {
+    const headers = await getAuthHeaders();
+    if (!headers) return [];
+
     try {
-        const response = await fetch(`/.netlify/functions/get-orders`);
+        const response = await fetch(`/.netlify/functions/get-orders`, { headers });
+        if (response.status === 401) {
+             showNotification("Session expired. Please log in again.", true);
+             netlifyIdentity.logout();
+             return [];
+        }
         if (!response.ok) {
             const errData = await response.json();
             throw new Error(errData.error || 'Failed to fetch orders from the server.');
@@ -105,14 +90,14 @@ async function fetchOrdersFromServer() {
     }
 }
 async function updateOrderStatusOnServer(orderId, platform, newStatus) {
-    if (platform !== 'Shopify') {
-        showNotification(`Action for ${platform} is not live yet.`, true);
-        return;
-    }
+    const headers = await getAuthHeaders();
+    if (!headers) return;
+
     showNotification(`Updating order to ${newStatus}...`);
     try {
         const response = await fetch(`/.netlify/functions/update-status`, {
             method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({ orderId: orderId, newStatus: newStatus })
         });
         if (!response.ok) { throw new Error((await response.json()).error); }
@@ -128,19 +113,39 @@ async function updateOrderStatusOnServer(orderId, platform, newStatus) {
     }
 }
 async function downloadLabelFromServer(orderId, platform) {
-    if (platform !== 'Shopify') {
-        showNotification(`Action for ${platform} is not live yet.`, true);
-        return;
-    }
-    showNotification(`Getting link for order label...`);
+    const headers = await getAuthHeaders();
+    if (!headers) return;
+
+    showNotification(`Getting label for order ${orderId}...`);
     try {
-        const response = await fetch(`/.netlify/functions/get-label-link?orderId=${orderId}`);
+        const response = await fetch(`/.netlify/functions/get-label-link?orderId=${orderId}`, { headers });
         if (!response.ok) throw new Error("Failed to get label link.");
+        
         const data = await response.json();
-        window.open(data.labelUrl, '_blank');
+
+        if (data.labelData && data.mimeType) {
+            const byteCharacters = atob(data.labelData);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: data.mimeType });
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `shipping-label-${orderId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            showNotification("Label download started.");
+        } else {
+            throw new Error(data.error || "Invalid label data received from server.");
+        }
     } catch (error) {
         console.error("API Error getting label link:", error);
-        showNotification("Error: Could not get label link.", true);
+        showNotification(`Error: ${error.message}`, true);
     }
 }
 function handleConnection(platform, action) {
@@ -197,19 +202,26 @@ function navigate(view) {
 
 // --- RENDER FUNCTIONS ---
 function renderAllDashboard() {
+    if (!currentUser) return;
     let ordersToRender = [...allOrders];
     const [startDate, endDate] = calculateDateRange(activeDatePreset, startDateFilterEl.value, endDateFilterEl.value);
     if (startDate && endDate) {
-        ordersToRender = ordersToRender.filter(o => new Date(o.date) >= startDate && new Date(o.date) <= endDate);
+        ordersToRender = ordersToRender.filter(o => {
+            const orderDate = new Date(o.date);
+            return orderDate >= startDate && orderDate <= endDate;
+        });
     }
     if (activePlatformFilter !== 'All') ordersToRender = ordersToRender.filter(o => o.platform === activePlatformFilter);
     if (activeStatusFilter !== 'All') ordersToRender = ordersToRender.filter(o => o.status === activeStatusFilter);
-    ordersToRender.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    const sortedOrdersToRender = [...ordersToRender].sort((a, b) => new Date(b.date) - new Date(a.date));
+
     renderPlatformFilters();
-    renderOrders(ordersToRender);
-    updateDashboardKpis(allOrders);
+    renderOrders(sortedOrdersToRender);
+    updateDashboardKpis(ordersToRender); 
 }
 function renderAllInsights() {
+     if (!currentUser) return;
     const [startDate, endDate] = calculateDateRange(insightsDatePreset, insightsStartDateFilterEl.value, insightsEndDateFilterEl.value);
     let ordersForPeriod = allOrders;
     if (startDate && endDate) {
@@ -246,7 +258,7 @@ function calculateDateRange(preset, startVal, endVal) {
             endDate = new Date(today.getFullYear() - 1, 11, 31); endDate.setHours(23, 59, 59, 999);
             break;
         case 'custom':
-            if (startVal) { const [y,m,d] = startVal.split('-'); startDate = new Date(y,m-1,d); }
+            if (startVal) { const [y,m,d] = startVal.split('-'); startDate = new Date(y,m-1,d); startDate.setHours(0,0,0,0); }
             if (endVal) { const [y,m,d] = endVal.split('-'); endDate = new Date(y,m-1,d); endDate.setHours(23, 59, 59, 999); }
             break;
         case 'all_time': default: return [null, null];
@@ -295,7 +307,6 @@ function calculateComparisonMetrics(currentPeriodOrders, allOrders, preset, curr
     };
 }
 function renderPlatformFilters() {
-    const platforms = ['All', 'Amazon', 'Shopify', 'Flipkart'];
     platformFiltersEl.innerHTML = platforms.map(p => `<button data-filter="${p}" class="filter-btn px-3 py-1 text-sm rounded-md ${activePlatformFilter === p ? 'active' : ''}">${p}</button>`).join('');
     platformFiltersEl.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -304,12 +315,11 @@ function renderPlatformFilters() {
         });
     });
 }
-function updateDashboardKpis(orders) {
-    const recentOrders = orders.slice(0, 250);
-    const newCount = recentOrders.filter(o => o.status === 'New').length;
-    const processingCount = recentOrders.filter(o => o.status === 'Processing').length;
-    const shippedCount = recentOrders.filter(o => o.status === 'Shipped').length;
-    const cancelledCount = recentOrders.filter(o => o.status === 'Cancelled').length;
+function updateDashboardKpis(ordersToDisplay) { 
+    const newCount = ordersToDisplay.filter(o => o.status === 'New').length;
+    const processingCount = ordersToDisplay.filter(o => o.status === 'Processing').length;
+    const shippedCount = ordersToDisplay.filter(o => o.status === 'Shipped').length;
+    const cancelledCount = ordersToDisplay.filter(o => o.status === 'Cancelled').length;
     const renderKpi = (element, title, value, icon) => { element.innerHTML = `<div class="flex items-center">${icon}<p class="text-sm font-medium text-slate-500 ml-2">${title}</p></div><p class="text-3xl font-bold text-slate-800 mt-2">${value}</p>`; };
     renderKpi(dashboardKpiElements.newOrders, 'New Orders', newCount, `<svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>`);
     renderKpi(dashboardKpiElements.processing, 'Processing', processingCount, `<svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`);
@@ -321,6 +331,7 @@ function updateInsightsKpis(ordersForPeriod, comparison) {
     const totalRevenue = activeOrders.reduce((sum, order) => sum + order.total, 0);
     const avgOrderValue = activeOrders.length > 0 ? totalRevenue / activeOrders.length : 0;
     const allOrdersCount = ordersForPeriod.length;
+    const newCount = ordersForPeriod.filter(o => o.status === 'New').length;
     const shippedCount = ordersForPeriod.filter(o => o.status === 'Shipped').length;
     const processingCount = ordersForPeriod.filter(o => o.status === 'Processing').length;
     const cancelledCount = ordersForPeriod.filter(o => o.status === 'Cancelled').length;
@@ -331,6 +342,7 @@ function updateInsightsKpis(ordersForPeriod, comparison) {
     renderKpi(insightsKpiElements.revenue.el, 'Total Revenue', formatCurrency(totalRevenue), `<svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01"></path></svg>`, comparison.revenueTrend, comparison.periodLabel);
     renderKpi(insightsKpiElements.avgValue.el, 'Avg. Value', formatCurrency(avgOrderValue), `<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 6h10a2 2 0 001.79-1.11L21 8M6 18h12a2 2 0 002-2v-5a2 2 0 00-2-2H6a2 2 0 00-2 2v5a2 2 0 002 2z"></path></svg>`, '', '');
     renderKpi(insightsKpiElements.allOrders.el, 'All Orders', allOrdersCount, `<svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>`, comparison.ordersTrend, comparison.periodLabel);
+    renderKpi(insightsKpiElements.new.el, 'New Orders', newCount, `<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>`, '', '');
     renderKpi(insightsKpiElements.shipped.el, 'Shipped', shippedCount, `<svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17H6V6h11v4l4 4v2h-3zM6 6l6-4l6 4"></path></svg>`, '', '');
     renderKpi(insightsKpiElements.processing.el, 'Processing', processingCount, `<svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`, '', '');
     renderKpi(insightsKpiElements.cancelled.el, 'Cancelled', cancelledCount, `<svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>`, '', '');
@@ -338,14 +350,14 @@ function updateInsightsKpis(ordersForPeriod, comparison) {
 function renderOrders(ordersToRender) {
     ordersListEl.innerHTML = '';
     if (ordersToRender.length === 0) {
-        ordersListEl.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">No orders found for the selected filters.</td></tr>`;
+        ordersListEl.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">No orders found for the selected filters.</td></tr>`;
         return;
     }
     ordersToRender.forEach(order => {
         const orderRow = document.createElement('tr');
         orderRow.className = `order-row border-b border-slate-100 cursor-pointer`;
         orderRow.dataset.orderId = order.id;
-        orderRow.innerHTML = `<td class="p-4"><img src="${platformLogos[order.platform]}" class="w-6 h-6" alt="${order.platform}"></td><td class="p-4 font-semibold text-slate-700">${order.id}</td><td class="p-4 font-medium">${order.name}</td><td class="p-4">${formatCurrency(order.total)}</td><td class="p-4"><span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(order.status)}">${order.status}</span></td>`;
+        orderRow.innerHTML = `<td class="p-4"><img src="${platformLogos[order.platform]}" class="w-6 h-6" alt="${order.platform}"></td><td class="p-4 text-slate-600 text-sm">${order.date}</td><td class="p-4 font-semibold text-slate-700">${order.id}</td><td class="p-4 font-medium">${order.name}</td><td class="p-4">${formatCurrency(order.total)}</td><td class="p-4"><span class="px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(order.status)}">${order.status}</span></td>`;
         orderRow.addEventListener('click', () => { openOrderModal(order.id); });
         ordersListEl.appendChild(orderRow);
     });
@@ -382,11 +394,10 @@ function renderInsightCharts(orders, startDate, endDate) {
     if (platformChartInstance) platformChartInstance.destroy();
     if (paymentChartInstance) paymentChartInstance.destroy();
 
-    // --- REVENUE CHART LOGIC ---
     let revenueData, revenueLabels;
     const timeDiff = endDate && startDate ? (endDate - startDate) / (1000 * 3600 * 24) : 366;
 
-    if (timeDiff > 90) { // Group by month for long ranges
+    if (timeDiff > 90) { 
         const monthlyRevenue = {};
         orders.forEach(o => { if (o.status !== 'Cancelled') {
             const month = new Date(o.date).toISOString().slice(0, 7);
@@ -395,7 +406,7 @@ function renderInsightCharts(orders, startDate, endDate) {
         }});
         revenueLabels = Object.keys(monthlyRevenue).sort();
         revenueData = revenueLabels.map(month => monthlyRevenue[month]);
-    } else { // Group by day for short ranges
+    } else { 
         const dailyRevenue = {};
         if (startDate && endDate) {
             let dateCursor = new Date(startDate);
@@ -431,11 +442,27 @@ function renderInsightCharts(orders, startDate, endDate) {
     paymentChartInstance = new Chart(paymentChartCanvas, {
         type: 'doughnut',
         data: { labels: Object.keys(paymentCounts), datasets: [{ data: Object.values(paymentCounts), backgroundColor: ['#10b981', '#f59e0b'] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Prepaid vs. COD' } } }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { 
+                title: { display: true, text: 'Prepaid vs. COD' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw;
+                            const total = context.chart.data.datasets[0].data.reduce((acc, curr) => acc + curr, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                            return `${label}: ${value} (${percentage})`;
+                        }
+                    }
+                }
+            } 
+        }
     });
 }
 
-// --- INITIALIZATION ---
 function initializeFilters(isInsights = false) {
     const statusEl = statusFilterEl;
     const dateEl = isInsights ? insightsDatePresetFilterEl : datePresetFilterEl;
@@ -470,21 +497,122 @@ function initializeFilters(isInsights = false) {
     endEl.addEventListener('change', isInsights ? renderAllInsights : renderAllDashboard);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    navDashboard.addEventListener('click', (e) => { e.preventDefault(); navigate('dashboard'); });
-    navInsights.addEventListener('click', (e) => { e.preventDefault(); navigate('insights'); });
-    navSettings.addEventListener('click', (e) => { e.preventDefault(); navigate('settings'); });
+async function refreshData() {
+    console.log("Auto-refreshing data...");
+    try {
+        const newOrders = await fetchOrdersFromServer();
+        if (newOrders.length === 0 && allOrders.length > 0) return;
+        
+        if (JSON.stringify(newOrders) !== JSON.stringify(allOrders)) { 
+            allOrders = newOrders;
+            if (currentView === 'dashboard') renderAllDashboard();
+            else if (currentView === 'insights') renderAllInsights();
+            showNotification("Order data has been updated.");
+        }
+    } catch (error) {
+        showNotification("Failed to auto-refresh data.", true);
+    }
+}
 
-    modalCloseBtn.addEventListener('click', closeOrderModal);
-    modalBackdrop.addEventListener('click', closeOrderModal);
-
+async function loadInitialData() {
     initializeFilters(false);
     initializeFilters(true);
-
     try {
         allOrders = await fetchOrdersFromServer();
         renderAllDashboard();
+        setInterval(refreshData, 120000); 
     } catch (error) {
         showNotification('Fatal Error: Could not load initial order data.', true);
     }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // --- INITIALIZE ALL DOM ELEMENT CONSTANTS ---
+    loginView = document.getElementById('login-view');
+    appView = document.getElementById('app');
+    logoutBtn = document.getElementById('logout-btn');
+    navDashboard = document.getElementById('nav-dashboard');
+    navInsights = document.getElementById('nav-insights');
+    navSettings = document.getElementById('nav-settings');
+    dashboardView = document.getElementById('dashboard-view');
+    insightsView = document.getElementById('insights-view');
+    settingsView = document.getElementById('settings-view');
+    ordersListEl = document.getElementById('orders-list');
+    notificationEl = document.getElementById('notification');
+    notificationMessageEl = document.getElementById('notification-message');
+    platformFiltersEl = document.getElementById('platform-filters');
+    statusFilterEl = document.getElementById('status-filter');
+    datePresetFilterEl = document.getElementById('date-preset-filter');
+    customDateContainer = document.getElementById('custom-date-container');
+    startDateFilterEl = document.getElementById('start-date-filter');
+    endDateFilterEl = document.getElementById('end-date-filter');
+    insightsDatePresetFilterEl = document.getElementById('insights-date-preset-filter');
+    insightsCustomDateContainer = document.getElementById('insights-custom-date-container');
+    insightsStartDateFilterEl = document.getElementById('insights-start-date-filter');
+    insightsEndDateFilterEl = document.getElementById('insights-end-date-filter');
+    dashboardKpiElements = {
+        newOrders: document.getElementById('kpi-dashboard-new'),
+        shipped: document.getElementById('kpi-dashboard-shipped'),
+        processing: document.getElementById('kpi-dashboard-processing'),
+        cancelled: document.getElementById('kpi-dashboard-cancelled'),
+    };
+    insightsKpiElements = {
+        revenue: { el: document.getElementById('kpi-insights-revenue') },
+        avgValue: { el: document.getElementById('kpi-insights-avg-value') },
+        allOrders: { el: document.getElementById('kpi-insights-all-orders') },
+        new: { el: document.getElementById('kpi-insights-new') },
+        shipped: { el: document.getElementById('kpi-insights-shipped') },
+        processing: { el: document.getElementById('kpi-insights-processing') },
+        cancelled: { el: document.getElementById('kpi-insights-cancelled') },
+    };
+    revenueChartCanvas = document.getElementById('revenue-chart');
+    platformChartCanvas = document.getElementById('platform-chart');
+    paymentChartCanvas = document.getElementById('payment-chart');
+    orderModal = document.getElementById('order-modal');
+    modalBackdrop = document.getElementById('modal-backdrop');
+    modalContent = document.getElementById('modal-content');
+    modalCloseBtn = document.getElementById('modal-close-btn');
+
+    // --- AUTHENTICATION & VIEW MANAGEMENT ---
+    const showApp = () => {
+        loginView.style.display = 'none';
+        appView.style.display = 'flex';
+    };
+
+    const showLogin = () => {
+        loginView.style.display = 'flex';
+        appView.style.display = 'none';
+    };
+
+    netlifyIdentity.on('login', user => {
+        currentUser = user;
+        showApp();
+        loadInitialData();
+    });
+
+    netlifyIdentity.on('logout', () => {
+        currentUser = null;
+        allOrders = [];
+        showLogin();
+    });
+
+    netlifyIdentity.on('error', err => console.error('Error with Netlify Identity:', err));
+
+    const user = netlifyIdentity.currentUser();
+    if (user) {
+        currentUser = user;
+        showApp();
+        loadInitialData();
+    } else {
+        showLogin();
+    }
+    
+    // --- GENERAL EVENT LISTENERS ---
+    navDashboard.addEventListener('click', (e) => { e.preventDefault(); navigate('dashboard'); });
+    navInsights.addEventListener('click', (e) => { e.preventDefault(); navigate('insights'); });
+    navSettings.addEventListener('click', (e) => { e.preventDefault(); navigate('settings'); });
+    logoutBtn.addEventListener('click', () => netlifyIdentity.logout());
+
+    modalCloseBtn.addEventListener('click', closeOrderModal);
+    modalBackdrop.addEventListener('click', closeOrderModal);
 });
