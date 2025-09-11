@@ -6,10 +6,9 @@ let activePlatformFilter = 'All';
 let activeStatusFilter = 'New';
 let activeDatePreset = 'today';
 let insightsDatePreset = 'last_7_days';
-let currentUser = null; // To store logged-in user info
+let currentUser = null; 
 
 // --- CONSTANTS & DOM ELEMENTS ---
-// Note: These are now initialized inside DOMContentLoaded to ensure elements exist
 let loginView, appView, logoutBtn, navDashboard, navInsights, navSettings,
     dashboardView, insightsView, settingsView, ordersListEl, notificationEl,
     notificationMessageEl, platformFiltersEl, statusFilterEl, datePresetFilterEl,
@@ -66,29 +65,46 @@ async function getAuthHeaders() {
     return { 'Authorization': `Bearer ${currentUser.token.access_token}` };
 }
 
+// --- THIS FUNCTION IS UPDATED ---
 async function fetchOrdersFromServer() {
     const headers = await getAuthHeaders();
     if (!headers) return [];
 
     try {
         const response = await fetch(`/.netlify/functions/get-orders`, { headers });
+        
+        // Check for authentication errors first
         if (response.status === 401) {
              showNotification("Session expired. Please log in again.", true);
              netlifyIdentity.logout();
              return [];
         }
+        
+        // Now, explicitly check if the response is successful before parsing
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'Failed to fetch orders from the server.');
+            // Try to get a specific error message from the server response
+            let errorText = `Failed with status: ${response.status}`;
+            try {
+                const errData = await response.json();
+                errorText = errData.error || JSON.stringify(errData);
+            } catch (e) {
+                // Ignore if the error response wasn't JSON
+            }
+            throw new Error(errorText);
         }
+        
+        // *** FIX: Explicitly parse the JSON from the response ***
         const orders = await response.json();
         return orders;
+        
     } catch (error) {
-        console.error("API Error:", error);
+        console.error("Client-side API Error in fetchOrdersFromServer:", error);
         showNotification(`Error: ${error.message}`, true);
         return [];
     }
 }
+
+
 async function updateOrderStatusOnServer(orderId, platform, newStatus) {
     const headers = await getAuthHeaders();
     if (!headers) return;
@@ -307,6 +323,7 @@ function calculateComparisonMetrics(currentPeriodOrders, allOrders, preset, curr
     };
 }
 function renderPlatformFilters() {
+    const platforms = ['All', 'Amazon', 'Shopify', 'Flipkart'];
     platformFiltersEl.innerHTML = platforms.map(p => `<button data-filter="${p}" class="filter-btn px-3 py-1 text-sm rounded-md ${activePlatformFilter === p ? 'active' : ''}">${p}</button>`).join('');
     platformFiltersEl.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
