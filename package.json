@@ -5,5 +5,7 @@
   "scripts": {
     "dev": "netlify dev"
   },
-  "dependencies": {}
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
 }
