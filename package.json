@@ -6,6 +6,7 @@
     "dev": "netlify dev"
   },
   "dependencies": {
+    "dotenv": "^16.6.1",
     "node-fetch": "^2.7.0"
   }
 }

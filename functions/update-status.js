@@ -1,7 +1,7 @@
 // functions/update-status.js
+const fetch = require('node-fetch');
 
 exports.handler = async function(event, context) {
-    // --- SECURITY: Protect the function ---
     const { user } = context.clientContext;
     if (!user) {
         return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
@@ -17,23 +17,24 @@ exports.handler = async function(event, context) {
     const RAPIDSHYP_API_URL = 'https://api.rapidshyp.com/rapidshyp/apis/v1/';
 
     try {
+        const orderDetailsUrl = `https://${SHOPIFY_SHOP_URL}/admin/api/2024-07/orders/${orderId}.json`;
+        const shopifyOrderResponse = await fetch(orderDetailsUrl, {
+            headers: { 'X-Shopify-Access-Token': SHOPIFY_TOKEN, 'Accept': 'application/json' }
+        });
+
+        if (!shopifyOrderResponse.ok) {
+            throw new Error(`Failed to fetch order details from Shopify: ${await shopifyOrderResponse.text()}`);
+        }
+        const { order } = await shopifyOrderResponse.json();
+        const publicOrderName = order.name.replace('#', '');
+
         let successResult;
 
         if (newStatus === 'Processing') {
-            console.log(`Processing Order ID: ${orderId} via RapidShyp.`);
-
-            const orderDetailsUrl = `https://${SHOPIFY_SHOP_URL}/admin/api/2024-07/orders/${orderId}.json`;
-            const shopifyOrderResponse = await fetch(orderDetailsUrl, {
-                headers: { 'X-Shopify-Access-Token': SHOPIFY_TOKEN, 'Accept': 'application/json' }
-            });
-
-            if (!shopifyOrderResponse.ok) {
-                throw new Error(`Failed to fetch order details from Shopify: ${await shopifyOrderResponse.text()}`);
-            }
-            const { order } = await shopifyOrderResponse.json();
-
+            console.log(`Processing Order ID: ${publicOrderName} via RapidShyp.`);
+            
             const rapidshypPayload = {
-                order_id: order.name,
+                order_id: publicOrderName,
                 customer_details: {
                     name: `${order.shipping_address.first_name} ${order.shipping_address.last_name}`,
                     phone: order.shipping_address.phone || order.customer.phone,
@@ -57,7 +58,8 @@ exports.handler = async function(event, context) {
                 order_total: parseFloat(order.total_price),
             };
 
-            const rapidshypResponse = await fetch(`${RAPIDSHYP_API_URL}shipments`, {
+            // --- FIX: Use the correct endpoint for creating shipments ---
+            const rapidshypResponse = await fetch(`${RAPIDSHYP_API_URL}shipment/create`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${RAPIDSHYP_API_KEY}`,
@@ -67,16 +69,17 @@ exports.handler = async function(event, context) {
             });
 
             if (!rapidshypResponse.ok) {
-                 console.warn(`RapidShyp API failed with status ${rapidshypResponse.status}. Proceeding with success for demo purposes.`);
-            } else {
-                 const responseData = await rapidshypResponse.json();
-                 console.log("RapidShyp Response:", responseData);
+                 const errorBody = await rapidshypResponse.text();
+                 console.error("RapidShyp API Error Body:", errorBody);
+                 throw new Error(`RapidShyp API failed with status ${rapidshypResponse.status} for order ${publicOrderName}`);
             }
 
+            const responseData = await rapidshypResponse.json();
+            console.log("RapidShyp Response:", responseData);
             successResult = { success: true, newStatus: 'Processing' };
 
         } else if (newStatus === 'Cancelled') {
-            console.log(`Cancelling Order ID: ${orderId} via RapidShyp.`);
+            console.log(`Cancelling Order ID: ${publicOrderName} via RapidShyp.`);
             
             const rapidshypResponse = await fetch(`${RAPIDSHYP_API_URL}shipments/cancel`, {
                 method: 'POST',
@@ -84,7 +87,7 @@ exports.handler = async function(event, context) {
                     'Authorization': `Bearer ${RAPIDSHYP_API_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ order_id: orderId }) 
+                body: JSON.stringify({ order_id: publicOrderName }) 
             });
             
             if (!rapidshypResponse.ok) {
@@ -97,7 +100,7 @@ exports.handler = async function(event, context) {
             throw new Error('This status update is not supported yet.');
         }
 
-        console.log(`Successfully updated order ${orderId} to ${newStatus}`);
+        console.log(`Successfully updated order ${publicOrderName} to ${newStatus}`);
         return { statusCode: 200, body: JSON.stringify(successResult) };
 
     } catch (error) {

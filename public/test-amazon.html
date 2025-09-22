@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Amazon API Test</title>
+</head>
+<body>
+    <h1>Amazon SP-API Test</h1>
+    <button id="testButton">Fetch Amazon Orders</button>
+    <pre id="response" style="background-color: #f0f0f0; padding: 1em; border: 1px solid #ccc;"></pre>
+
+    <script>
+        document.getElementById('testButton').addEventListener('click', async () => {
+            const responseElement = document.getElementById('response');
+            responseElement.textContent = 'Fetching...';
+            try {
+                const response = await fetch('/.netlify/functions/test-amazon-api');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    responseElement.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    const errorText = await response.text();
+                    responseElement.textContent = `Error ${response.status}: ${response.statusText}\n\n${errorText}`;
+                }
+            } catch (error) {
+                responseElement.textContent = `An error occurred: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
