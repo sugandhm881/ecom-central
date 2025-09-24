@@ -19,7 +19,7 @@ function hmac(key, value) {
 }
 
 function createSignature(stringToSign, dateStamp, service) {
-    const kDate = hmac(`AWS4${process.env.AWS_SECRET_KEY}`, dateStamp);
+    const kDate = hmac(`AWS4${process.env.AWS_MYSECRET_KEY}`, dateStamp);
     const kRegion = hmac(kDate, process.env.AWS_REGION);
     const kService = hmac(kRegion, service);
     const kSigning = hmac(kService, 'aws4_request');
@@ -58,7 +58,7 @@ function getAwsSignedHeaders(options, accessToken) {
     const canonicalRequest = createCanonicalRequest(options, host, amzDate, accessToken);
     const stringToSign = createStringToSign(canonicalRequest, service, amzDate, dateStamp);
     const signature = createSignature(stringToSign, dateStamp, service);
-    const authorizationHeader = `AWS4-HMAC-SHA256 Credential=${process.env.AWS_ACCESS_KEY}/${dateStamp}/${process.env.AWS_REGION}/${service}/aws4_request, SignedHeaders=host;x-amz-access-token;x-amz-date, Signature=${signature}`;
+    const authorizationHeader = `AWS4-HMAC-SHA256 Credential=${process.env.AWS_MYACCESS_KEY}/${dateStamp}/${process.env.AWS_REGION}/${service}/aws4_request, SignedHeaders=host;x-amz-access-token;x-amz-date, Signature=${signature}`;
     return {
         'x-amz-access-token': accessToken,
         'x-amz-date': amzDate,
