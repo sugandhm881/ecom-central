@@ -32,6 +32,17 @@
             background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E');
             background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1.2em 1.2em; padding-right: 2.5rem;
         }
+                    .status-transit {
+                background-color: #fff3cd;
+                color: #856404;
+                font-weight: bold;
+            }
+
+            .status-processing {
+                background-color: #d1ecf1;
+                color: #0c5460;
+                font-weight: bold;
+            }
     </style>
 </head>
 <body class="text-slate-800">
@@ -223,15 +234,17 @@
                             <table class="w-full text-left">
                                 <thead>
                                     <tr class="border-b border-slate-200 text-sm text-slate-500">
-                                        <th class="py-3 px-4">Ad Set Name</th>
-                                        <th class="py-3 px-4 text-right">Spend</th>
-                                        <th class="py-3 px-4 text-right">Total Orders</th>
-                                        <th class="py-3 px-4 text-right">Delivered</th>
-                                        <th class="py-3 px-4 text-right">RTO</th>
-                                        <th class="py-3 px-4 text-right">Cancelled</th>
-                                        <th class="py-3 px-4 text-right">RTO %</th>
-                                        <th class="py-3 px-4 text-right">CPO</th>
-                                        <th class="py-3 px-4 text-right">ROAS</th>
+                                        <th>Ad Set Name</th>
+                                        <th>Spend (₹)</th>
+                                        <th>Total Orders</th>
+                                        <th>Delivered</th>
+                                        <th>RTO</th>
+                                        <th>Cancelled</th>
+                                        <th>In-Transit</th>   <!-- Add -->
+                                        <th>Processing</th>   <!-- Add -->
+                                        <th>RTO %</th>
+                                        <th>CPO (₹)</th>
+                                        <th>ROAS</th>
                                     </tr>
                                 </thead>
                                 <tbody id="adset-performance-table-body"></tbody>

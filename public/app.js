@@ -264,24 +264,27 @@ function renderDailyPerformance() {
     renderKpi(adKpiElements.rto, 'RTO', formatNumber(totals.rto));
     renderKpi(adKpiElements.cancelled, 'Cancelled', formatNumber(totals.cancelled));
 
-    performanceTableBody.innerHTML = '';
-    [...performanceData].reverse().forEach(day => {
-        const cpo = day.totalOrders > 0 ? (day.spend / day.totalOrders) : 0;
-        const roas = day.spend > 0 ? (day.revenue / day.spend) : 0;
-        const rtoRate = day.totalOrders > 0 ? (day.rtoOrders / day.totalOrders) : 0;
-        performanceTableBody.innerHTML += `
-            <tr class="border-b border-slate-100">
-                <td class="py-3 px-4 font-medium">${new Date(day.date).toLocaleDateString('en-GB', { day: 'short', month: 'short' })}</td>
-                <td class="py-3 px-4 text-right">${formatCurrency(day.spend)}</td>
-                <td class="py-3 px-4 text-right">${formatNumber(day.totalOrders)}</td>
-                <td class="py-3 px-4 text-right">${formatCurrency(day.revenue)}</td>
-                <td class="py-3 px-4 text-right">${formatCurrency(cpo)}</td>
-                <td class="py-3 px-4 text-right font-semibold">${roas.toFixed(2)}x</td>
-                <td class="py-3 px-4 text-right text-green-600">${formatNumber(day.deliveredOrders)}</td>
-                <td class="py-3 px-4 text-right text-red-600">${formatNumber(day.rtoOrders)}</td>
-                <td class="py-3 px-4 text-right text-red-600 font-medium">${formatPercent(rtoRate)}</td>
-            </tr>`;
-    });
+        performanceTableBody.innerHTML = '';
+        [...performanceData].reverse().forEach(day => {
+            const cpo = day.totalOrders > 0 ? (day.spend / day.totalOrders) : 0;
+            const roas = day.spend > 0 ? (day.revenue / day.spend) : 0;
+            const rtoRate = day.totalOrders > 0 ? (day.rtoOrders / day.totalOrders) : 0;
+            performanceTableBody.innerHTML += `
+                <tr class="border-b border-slate-100">
+                    <td class="py-3 px-4 font-medium">${new Date(day.date).toLocaleDateString('en-GB', { day: 'short', month: 'short' })}</td>
+                    <td class="py-3 px-4 text-right">${formatCurrency(day.spend)}</td>
+                    <td class="py-3 px-4 text-right">${formatNumber(day.totalOrders)}</td>
+                    <td class="py-3 px-4 text-right">${formatCurrency(day.revenue)}</td>
+                    <td class="py-3 px-4 text-right">${formatCurrency(cpo)}</td>
+                    <td class="py-3 px-4 text-right font-semibold">${roas.toFixed(2)}x</td>
+                    <td class="py-3 px-4 text-right text-green-600">${formatNumber(day.deliveredOrders)}</td>
+                    <td class="py-3 px-4 text-right text-red-600">${formatNumber(day.rtoOrders)}</td>
+                    <td class="py-3 px-4 text-right text-gray-600">${formatNumber(day.cancelledOrders || 0)}</td>
+                    <td class="py-3 px-4 text-right text-yellow-600">${formatNumber(day.inTransitOrders || 0)}</td>
+                    <td class="py-3 px-4 text-right text-blue-600">${formatNumber(day.processingOrders || 0)}</td>
+                    <td class="py-3 px-4 text-right text-red-600 font-medium">${formatPercent(rtoRate)}</td>
+                </tr>`;
+        });
 }
 
 function renderAdPerformanceCharts() {
@@ -313,55 +316,63 @@ async function handleAdsetDateChange() {
     if (startDate && endDate) {
         const since = startDate.toISOString().split('T')[0];
         const until = endDate.toISOString().split('T')[0];
-        adsetPerformanceData = await fetchAdsetPerformanceData(since, until);
+        const response = await fetchAdsetPerformanceData(since, until);
+        adsetPerformanceData = response.adsetPerformance || [];   // ✅ fix
+        termPerformanceData = response.termPerformance || [];     // ✅ optional (if you want to render terms)
         renderAdsetPerformanceDashboard();
     }
 }
 
 function renderAdsetPerformanceDashboard() {
     adsetPerformanceTableBody.innerHTML = '';
-     if (adsetPerformanceData.length === 0) {
-         adsetPerformanceTableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-slate-500">No ad set data. Ensure ads use 'utm_content={{adset.name}}'.</td></tr>`;
-         return;
+     if (!adsetPerformanceData || adsetPerformanceData.length === 0) {
+    adsetPerformanceTableBody.innerHTML = `<tr><td colspan="11" class="p-4 text-center text-slate-500">
+        No ad set data. Ensure ads use 'utm_content={{adset.name}}'.
+    </td></tr>`;
+    return;
     }
-    adsetPerformanceData.forEach(adset => {
-        const totalOrders = adset.totalOrders;
-        const cpo = totalOrders > 0 ? (adset.spend / totalOrders) : 0;
-        const roas = adset.spend > 0 ? (adset.revenue / adset.spend) : 0;
-        const rtoRate = totalOrders > 0 ? (adset.rtoOrders / totalOrders) : 0;
+            adsetPerformanceData.forEach(adset => {
+            const totalOrders = adset.totalOrders;
+            const cpo = totalOrders > 0 ? (adset.spend / totalOrders) : 0;
+            const roas = adset.spend > 0 ? (adset.revenue / adset.spend) : 0;
+            const rtoRate = totalOrders > 0 ? (adset.rtoOrders / totalOrders) : 0;
 
-        let adsetRow = `<tr class="border-b border-slate-200 bg-slate-50 cursor-pointer" data-adset-id="${adset.id}">
-            <td class="py-3 px-4 font-bold text-sm text-slate-800">${adset.name}</td>
-            <td class="py-3 px-4 text-right font-bold">${formatCurrency(adset.spend)}</td>
-            <td class="py-3 px-4 text-right font-bold">${formatNumber(totalOrders)}</td>
-            <td class="py-3 px-4 text-right font-bold text-green-600">${formatNumber(adset.deliveredOrders)}</td>
-            <td class="py-3 px-4 text-right font-bold text-red-600">${formatNumber(adset.rtoOrders)}</td>
-            <td class="py-3 px-4 text-right font-bold text-slate-500">${formatNumber(adset.cancelledOrders)}</td>
-            <td class="py-3 px-4 text-right font-bold text-red-600">${formatPercent(rtoRate)}</td>
-            <td class="py-3 px-4 text-right font-bold">${formatCurrency(cpo)}</td>
-            <td class="py-3 px-4 text-right font-bold">${roas.toFixed(2)}x</td>
-        </tr>`;
-
-        (adset.terms || []).forEach(term => {
-            const termTotalOrders = term.totalOrders;
-            const termCpo = termTotalOrders > 0 ? (term.spend / termTotalOrders) : 0;
-            const termRoas = term.spend > 0 ? (term.revenue / term.spend) : 0;
-            const termRtoRate = termTotalOrders > 0 ? (term.rtoOrders / termTotalOrders) : 0;
-            adsetRow += `<tr class="adset-term-row hidden border-b border-slate-100" data-parent-adset-id="${adset.id}">
-                <td class="py-2 px-8 text-sm text-slate-600">${term.name || term.id}</td>
-                <td class="py-2 px-4 text-right text-sm">${formatCurrency(term.spend)}</td>
-                <td class="py-2 px-4 text-right text-sm">${formatNumber(termTotalOrders)}</td>
-                <td class="py-2 px-4 text-right text-sm text-green-600">${formatNumber(term.deliveredOrders)}</td>
-                <td class="py-2 px-4 text-right text-sm text-red-600">${formatNumber(term.rtoOrders)}</td>
-                <td class="py-2 px-4 text-right text-sm text-slate-500">${formatNumber(term.cancelledOrders)}</td>
-                <td class="py-2 px-4 text-right text-sm text-red-600">${formatPercent(termRtoRate)}</td>
-                <td class="py-2 px-4 text-right text-sm">${formatCurrency(termCpo)}</td>
-                <td class="py-2 px-4 text-right text-sm">${termRoas.toFixed(2)}x</td>
+            let adsetRow = `<tr class="border-b border-slate-200 bg-slate-50 cursor-pointer" data-adset-id="${adset.id}">
+                <td class="py-3 px-4 font-bold text-sm text-slate-800">${adset.name}</td>
+                <td class="py-3 px-4 text-right font-bold">${formatCurrency(adset.spend)}</td>
+                <td class="py-3 px-4 text-right font-bold">${formatNumber(totalOrders)}</td>
+                <td class="py-3 px-4 text-right font-bold text-green-600">${formatNumber(adset.deliveredOrders)}</td>
+                <td class="py-3 px-4 text-right font-bold text-red-600">${formatNumber(adset.rtoOrders)}</td>
+                <td class="py-3 px-4 text-right font-bold text-slate-500">${formatNumber(adset.cancelledOrders)}</td>
+                <td class="py-3 px-4 text-right font-bold text-blue-600">${formatNumber(adset.inTransitOrders || 0)}</td>   <!-- ✅ In-Transit -->
+                <td class="py-3 px-4 text-right font-bold text-yellow-600">${formatNumber(adset.processingOrders || 0)}</td> <!-- ✅ Processing -->
+                <td class="py-3 px-4 text-right font-bold text-red-600">${formatPercent(rtoRate)}</td>
+                <td class="py-3 px-4 text-right font-bold">${formatCurrency(cpo)}</td>
+                <td class="py-3 px-4 text-right font-bold">${roas.toFixed(2)}x</td>
             </tr>`;
-        });
 
-        adsetPerformanceTableBody.innerHTML += adsetRow;
-    });
+            (adset.terms || []).forEach(term => {
+                const termTotalOrders = term.totalOrders;
+                const termCpo = termTotalOrders > 0 ? (term.spend / termTotalOrders) : 0;
+                const termRoas = term.spend > 0 ? (term.revenue / term.spend) : 0;
+                const termRtoRate = termTotalOrders > 0 ? (term.rtoOrders / termTotalOrders) : 0;
+                adsetRow += `<tr class="adset-term-row hidden border-b border-slate-100" data-parent-adset-id="${adset.id}">
+                    <td class="py-2 px-8 text-sm text-slate-600">${term.name || term.id}</td>
+                    <td class="py-2 px-4 text-right text-sm">${formatCurrency(term.spend)}</td>
+                    <td class="py-2 px-4 text-right text-sm">${formatNumber(termTotalOrders)}</td>
+                    <td class="py-2 px-4 text-right text-sm text-green-600">${formatNumber(term.deliveredOrders)}</td>
+                    <td class="py-2 px-4 text-right text-sm text-red-600">${formatNumber(term.rtoOrders)}</td>
+                    <td class="py-2 px-4 text-right text-sm text-slate-500">${formatNumber(term.cancelledOrders)}</td>
+                    <td class="py-2 px-4 text-right text-sm text-blue-600">${formatNumber(term.inTransitOrders || 0)}</td>   <!-- ✅ In-Transit -->
+                    <td class="py-2 px-4 text-right text-sm text-yellow-600">${formatNumber(term.processingOrders || 0)}</td> <!-- ✅ Processing -->
+                    <td class="py-2 px-4 text-right text-sm text-red-600">${formatPercent(termRtoRate)}</td>
+                    <td class="py-2 px-4 text-right text-sm">${formatCurrency(termCpo)}</td>
+                    <td class="py-2 px-4 text-right text-sm">${termRoas.toFixed(2)}x</td>
+                </tr>`;
+            });
+
+            adsetPerformanceTableBody.innerHTML += adsetRow;
+        });
 
     adsetPerformanceTableBody.querySelectorAll('tr[data-adset-id]').forEach(row => {
         row.addEventListener('click', () => {
@@ -568,7 +579,8 @@ function updateInsightsKpis(orders, comparison) {
     const allOrdersCount = orders.length;
     const newCount = orders.filter(o => o.status === 'New').length;
     const shippedCount = orders.filter(o => o.status === 'Shipped').length;
-    const rtoCount = orders.filter(o => o.tags && o.tags.toLowerCase().includes('rto')).length;
+    // Force RTO count from RapidShyp real-time status
+    const rtoCount = orders.filter(o => o.rapidshypStatus === 'RTO').length;
     const cancelledCount = orders.filter(o => o.status === 'Cancelled').length;
     const renderKpi = (element, title, value, icon, trend, periodLabel) => {
         const trendColor = trend && trend.startsWith('+') ? 'text-green-500' : 'text-red-500';
@@ -616,8 +628,19 @@ function renderInsightCharts(orders, startDate, endDate) {
         data: { labels: Object.keys(platformRevenue), datasets: [{ data: Object.values(platformRevenue), backgroundColor: ['#96bf48', '#ff9900', '#2874f0'] }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Revenue by Platform' } } }
     });
-    const paymentCounts = { 'Prepaid': 0, 'COD': 0 };
-    orders.forEach(o => { if (o.paymentMethod) paymentCounts[o.paymentMethod]++; });
+    const paymentCounts = { Prepaid: 0, COD: 0 };
+
+orders.forEach(o => {
+    if (!o.paymentMethod) return;
+
+    const pm = o.paymentMethod.toLowerCase();
+
+    if (pm.includes("cod") || pm.includes("cash")) {
+        paymentCounts.COD++;
+    } else {
+        paymentCounts.Prepaid++;
+    }
+});
     paymentChartInstance = new Chart(paymentChartCanvas, {
         type: 'doughnut',
         data: { labels: Object.keys(paymentCounts), datasets: [{ data: Object.values(paymentCounts), backgroundColor: ['#10b981', '#f59e0b'] }] },
