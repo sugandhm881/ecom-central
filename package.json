@@ -7,7 +7,7 @@
     "start": "vercel dev"
   },
   "dependencies": {
-    "@clerk/clerk-sdk-node": "^4.14.7",
+    "@clerk/clerk-sdk-node": "4.12.20",
     "@clerk/clerk-js": "^4.73.1",
     "node-fetch": "^3.3.2"
   }
