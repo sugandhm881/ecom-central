@@ -1,5 +1,5 @@
 [build]
-  publish = "functions/"
+  functions = "functions/"
   publish = "public/"
 
 [dev]
