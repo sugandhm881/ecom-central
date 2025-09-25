@@ -70,11 +70,7 @@ function createFallbackImage(itemName) {
 
 // --- API FUNCTIONS ---
 async function getAuthHeaders() {
-    if (!currentUser || !currentUser.token) {
-        netlifyIdentity.open();
-        return null;
-    }
-    return { 'Authorization': `Bearer ${currentUser.token.access_token}` };
+    return { "Authorization": `Bearer ${window.API_KEY}` };
 }
 
 async function fetchApiData(endpoint, errorMessage) {
@@ -780,10 +776,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const showApp = () => { loginView.style.display = 'none'; appView.style.display = 'flex'; };
     const showLogin = () => { loginView.style.display = 'flex'; appView.style.display = 'none'; };
 
-    netlifyIdentity.on('login', user => { currentUser = user; showApp(); loadInitialData(); });
-    netlifyIdentity.on('logout', () => { currentUser = null; showLogin(); });
+    //netlifyIdentity.on('login', user => { currentUser = user; showApp(); loadInitialData(); });
+    //netlifyIdentity.on('logout', () => { currentUser = null; showLogin(); });
     
-    const user = netlifyIdentity.currentUser();
+    //const user = netlifyIdentity.currentUser();
     if (user) { currentUser = user; showApp(); loadInitialData(); } 
     else { showLogin(); }
     

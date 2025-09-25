@@ -13,6 +13,20 @@ function hmac(key, value) {
     return crypto.createHmac('sha256', key).update(value).digest();
 }
 
+export default async function handler(req, res) {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || authHeader !== `Bearer ${process.env.DASHBOARD_API_KEY}`) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    // Your original Shopify/Amazon/RapidShyp call logic here
+    res.status(200).json({ success: true, data: [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 function createSignature(stringToSign, dateStamp, service) {
     const kDate = hmac(`AWS4${process.env.AWS_MYSECRET_KEY}`, dateStamp);
     const kRegion = hmac(kDate, process.env.AWS_MYREGION);

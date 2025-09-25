@@ -1,12 +1,14 @@
 {
   "name": "seller-dashboard",
   "version": "1.0.0",
-  "description": "A unified seller panel.",
   "scripts": {
-    "dev": "netlify dev"
+    "dev": "vercel dev",
+    "build": "echo 'Static build handled by Vercel'",
+    "start": "vercel dev"
   },
   "dependencies": {
-    "dotenv": "^16.6.1",
-    "node-fetch": "^2.7.0"
+    "@clerk/clerk-sdk-node": "^4.14.7",
+    "@clerk/clerk-js": "^4.73.1",
+    "node-fetch": "^3.3.2"
   }
 }

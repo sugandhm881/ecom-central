@@ -111,3 +111,17 @@ exports.handler = async function(event, context) {
         };
     }
 };
+
+export default async function handler(req, res) {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || authHeader !== `Bearer ${process.env.DASHBOARD_API_KEY}`) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    // Your original Shopify/Amazon/RapidShyp call logic here
+    res.status(200).json({ success: true, data: [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "functions/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "rewrites": [
+    { "source": "/functions/(.*)", "destination": "/functions/$1" }
+  ]
+}
