@@ -1,8 +1,8 @@
 [build]
-  functions = "ad-dashboard/functions"
-  publish = "ad-dashboard/public"
+  publish = "functions/"
+  publish = "public/"
 
 [dev]
   framework = "#static"
-  publish = "ad-dashboard/public"
+  publish = "public"
   port = 8888
