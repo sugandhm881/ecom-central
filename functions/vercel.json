@@ -7,4 +7,5 @@
   "rewrites": [
     { "source": "/functions/(.*)", "destination": "/functions/$1" }
   ]
+  
 }

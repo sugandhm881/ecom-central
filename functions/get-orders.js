@@ -1,35 +1,15 @@
-// functions/get-orders.js
 const fetch = require('node-fetch');
 const crypto = require('crypto');
-
-if (process.env.NODE_ENV !== 'production') require('dotenv').config();
 
 // Helper to add a delay
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- Amazon Authentication Helpers ---
-// NOTE: These helpers are duplicated in get-amazon-buyer-info.js
-// In a larger project, you might share them in a separate utility file.
-
 global.lwaToken = null;
 global.lwaTokenExp = 0;
 
 function hmac(key, value) {
     return crypto.createHmac('sha256', key).update(value).digest();
-}
-
-export default async function handler(req, res) {
-  const authHeader = req.headers["authorization"];
-  if (!authHeader || authHeader !== `Bearer ${process.env.DASHBOARD_API_KEY}`) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  try {
-    // Your original Shopify/Amazon/RapidShyp call logic here
-    res.status(200).json({ success: true, data: [] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
 }
 
 function createSignature(stringToSign, dateStamp, service) {
@@ -243,7 +223,12 @@ async function fetchAmazonOrders() {
 // ---------------------- Netlify Handler ----------------------
 exports.handler = async function(event, context) {
     const { user } = context.clientContext;
-    if (!user) return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+    if (!user) {
+        return { 
+            statusCode: 401, 
+            body: JSON.stringify({ error: "Unauthorized" }) 
+        };
+    }
 
     try {
         const [shopifyOrders, amazonOrders] = await Promise.all([
@@ -254,9 +239,15 @@ exports.handler = async function(event, context) {
         let allOrders = [...shopifyOrders, ...amazonOrders];
         allOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        return { statusCode: 200, body: JSON.stringify(allOrders) };
+        return { 
+            statusCode: 200, 
+            body: JSON.stringify(allOrders) 
+        };
     } catch (err) {
         console.error("CRITICAL ERROR in get-orders:", err);
-        return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+        return { 
+            statusCode: 500, 
+            body: JSON.stringify({ error: err.message }) 
+        };
     }
 };

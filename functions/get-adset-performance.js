@@ -7,7 +7,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // --- MAIN HANDLER ---
 exports.handler = async function (event, context) {
-    const { user } = context.clientContext;
+    const { user } = context.clientContext || {};
     if (!user) {
         return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
     }
@@ -97,7 +97,6 @@ exports.handler = async function (event, context) {
                 );
             }
 
-            // Get RapidShyp/Shopify status
             const status = getRealOrderStatus(order, rapidshypStatuses);
 
             const orderId = order.name.replace('#', '');
@@ -105,7 +104,7 @@ exports.handler = async function (event, context) {
                 ? String(rapidshypStatuses[orderId]).trim().toUpperCase()
                 : null;
 
-            order.status = status; // unified status
+            order.status = status;
             order.rapidshypStatus = status === "RTO" ? "RTO" : null;
 
             enrichedOrders.push({
@@ -206,7 +205,7 @@ exports.handler = async function (event, context) {
                         adsetName: adset.name
                     }))
                 ),
-                orders: enrichedOrders   // 🚀 now available to frontend
+                orders: enrichedOrders
             }),
         };
 
@@ -215,21 +214,6 @@ exports.handler = async function (event, context) {
         return { statusCode: 500, headers: corsHeaders(), body: JSON.stringify({ error: err.message }) };
     }
 };
-
-
-export default async function handler(req, res) {
-  const authHeader = req.headers["authorization"];
-  if (!authHeader || authHeader !== `Bearer ${process.env.DASHBOARD_API_KEY}`) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  try {
-    // Your original Shopify/Amazon/RapidShyp call logic here
-    res.status(200).json({ success: true, data: [] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
 
 // --- HELPERS ---
 function corsHeaders() {
@@ -252,46 +236,68 @@ function getShopifyFallbackStatus(order) {
     if (order.fulfillments && order.fulfillments.length > 0) return 'Processing';
     return 'Processing';
 }
+// --- RAPIDSHYP HELPERS ---
 async function getRealRapidShypStatuses(apiKey, shopifyOrders) {
     if (!apiKey) return {};
+
     const statuses = {};
     const ordersWithAwbs = shopifyOrders.filter(o => o.awbs && o.awbs.length > 0);
-    await Promise.all(ordersWithAwbs.map(async (order) => {
-        const awb = order.awbs[0];
-        try {
-            const trackingInfo = await trackRapidShypByAwb(apiKey, awb);
-            if (trackingInfo && trackingInfo.status) {
-                const orderId = order.name.replace('#', '');
-                statuses[orderId] = trackingInfo.status;
+
+    console.log("Orders with AWBs for RapidShyp:", ordersWithAwbs.map(o => ({ name: o.name, awbs: o.awbs })));
+
+    await Promise.all(
+        ordersWithAwbs.map(async (order) => {
+            const awb = order.awbs[0]; // take the first AWB
+            try {
+                const trackingInfo = await trackRapidShypByAwb(apiKey, awb);
+
+                if (trackingInfo && trackingInfo.status) {
+                    const orderId = order.name.replace('#', '');
+                    statuses[orderId] = trackingInfo.status;
+                } else {
+                    console.warn(`⚠️ No tracking info returned for AWB ${awb}`);
+                }
+            } catch (err) {
+                console.error(`❌ RapidShyp fetch failed for AWB ${awb}:`, err.message);
             }
-        } catch (err) {
-            console.error(`❌ RapidShyp fetch fail ${awb}:`, err.message);
-        }
-    }));
+        })
+    );
+
     return statuses;
 }
+
 async function trackRapidShypByAwb(apiKey, awb) {
     const url = "https://api.rapidshyp.com/rapidshyp/apis/v1/track_order";
     const headers = { "rapidshyp-token": apiKey, "Content-Type": "application/json" };
+    
     try {
         const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ awb }) });
-        if (!res.ok) return null;
         const data = await res.json();
-        if (data.success && data.records && data.records.length > 0) {
-            const shipment = data.records[0].shipment_details[0];
-            return {
-                awb,
-                status: shipment.current_tracking_status_desc || shipment.current_tracking_status,
-                statusDate: shipment.current_status_date,
-                courier: shipment.courier_name
-            };
+
+        console.log("RapidShyp response for AWB", awb, data);
+
+        if (!data.success) {
+            console.warn(`⚠️ RapidShyp API returned success=false for AWB ${awb}`);
+            return null;
         }
-        return null;
+
+        const record = data.records?.[0];
+        const shipment = record?.shipment_details?.[0];
+
+        if (!shipment) return null;
+
+        return {
+            awb,
+            status: shipment.current_tracking_status_desc || shipment.current_tracking_status,
+            statusDate: shipment.current_status_date,
+            courier: shipment.courier_name
+        };
     } catch (err) {
-        console.error(`❌ RapidShyp network error AWB ${awb}:`, err.message);
+        console.error(`❌ RapidShyp network error for AWB ${awb}:`, err.message);
         return null;
     }
 }
+
 function getRealOrderStatus(order, rapidshypStatuses) {
     const orderId = order.name.replace('#', '');
     const realStatus = rapidshypStatuses[orderId];

@@ -1,8 +1,14 @@
-[build]
-  functions = "functions/"
-  publish = "public/"
+# seller-dashboard/netlify.toml
 
-[dev]
-  framework = "#static"
+[build]
+  # Do not set a base directory if your netlify.toml is already inside seller-dashboard
+  # The publish directory is relative to the base
   publish = "public"
-  port = 8888
+  # The functions directory is relative to the base
+  functions = "functions"
+
+[[redirects]]
+  # This rule correctly proxies requests from the browser to your functions
+  from = "/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
